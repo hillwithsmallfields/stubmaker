@@ -22,7 +22,7 @@ def arg_name(arg):
 
 def arg_type(arg):
     """Return the type part of an arg."""
-    return without_flags(arg.split('.')[1]) if '.' in arg else None
+    return arg.split('.')[1] if '.' in arg else None
 
 TYPE_READERS = {
     'csv': "[f(x) for x in csv.DictReader(%s_stream)]",
@@ -51,14 +51,11 @@ def pystub(args, csv, fileinput, json, yaml, output):
         if yaml:
             outstream.write("import yaml\n")
         if args:
-            print("args originally", args)
             outstream.write("""\ndef get_args():\n    parser = argparse.ArgumentParser()\n""")
             short_args = set()
             for iarg, arg in enumerate(args):
-                print("  arg:", arg)
                 argtype = arg_type(arg)
                 arg = arg_name(arg)
-                print("  arg name:", arg)
                 short = arg[0]
                 extra = ', "-%s"' % short if short not in short_args else ""
                 short_args.add(short)
@@ -82,8 +79,6 @@ def pystub(args, csv, fileinput, json, yaml, output):
                                 ("" if iarg == len(args) - 1 else "--",
                                  arg, extra, action))
             outstream.write("""    return vars(parser.parse_args())\n\n\n""")
-        print("args:", args)
-        print("input_args:", input_args)
         outstream.write("""def %s(%s):\n    return foo\n\n\n"""
                         % (progname,
                            ", ".join([k for k in arg_types.keys() if k != 'output']
@@ -91,7 +86,7 @@ def pystub(args, csv, fileinput, json, yaml, output):
                            ))
         outstream.write("""def %s_main(%s):\n""" % (progname,
                                             ", ".join(args)))
-        if args and (csv or json or yaml or 'output' in args):
+        if args:
             has_config = 'config' in args and yaml
             if has_config:
                 outstream.write("""    with open(config) as confstream:\n""")
