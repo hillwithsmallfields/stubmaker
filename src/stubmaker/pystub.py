@@ -51,6 +51,7 @@ def pystub(args, csv, fileinput, json, yaml, output):
             outstream.write("""\ndef get_args():\n    parser = argparse.ArgumentParser()\n""")
             short_args = set()
             for iarg, arg in enumerate(args):
+                arg = arg_name(arg)
                 short = arg[0]
                 extra = ', "-%s"' % short if short not in short_args else ""
                 short_args.add(short)
@@ -74,7 +75,7 @@ def pystub(args, csv, fileinput, json, yaml, output):
             outstream.write("""    return vars(parser.parse_args())\n\n\n""")
         outstream.write("""def %s(%s):\n    return foo\n\n\n"""
                         % (progname,
-                           ", ".join(arg_types.keys())))
+                           ", ".join(k for k in arg_types.keys() if k != 'output')))
         outstream.write("""def %s_main(%s):\n""" % (progname,
                                             ", ".join(args)))
         if args and (csv or json or yaml or 'output' in args):
