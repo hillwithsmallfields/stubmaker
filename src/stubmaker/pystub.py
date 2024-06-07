@@ -5,12 +5,36 @@ import os
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--args", "-a", nargs='*')
-    parser.add_argument("--csv", "-c", action='store_true')
-    parser.add_argument("--fileinput", "-f", action='store_true')
-    parser.add_argument("--json", "-j", action='store_true')
-    parser.add_argument("--yaml", "-y", action='store_true')
-    parser.add_argument("--output", "-o")
+    parser.add_argument(
+        "--args", "-a",
+        nargs='*',
+        help="""Provide a list of command line arguments to the program.
+        If an argument has '%' at the end, it is treated as supplying an
+        input filename, and a reader is provided.
+        An argument name may have '.csv', '.json', or '.yaml' at the end of it,
+        in which case the appropriate way of reading the file is used.
+        An argument with ':' at the end is treated as a boolean flag.
+        The arguments 'config' and 'output' are treated specially.
+        """)
+    parser.add_argument(
+        "--fileinput", "-f",
+        action='store_true',
+        help="""Use the fileinput package to read multiple files seamlessly.""")
+    parser.add_argument(
+        "--csv", "-c",
+        action='store_true',
+        help="""Import the 'csv' package, even if none of the input arguments have a .csv type.""")
+    parser.add_argument(
+        "--json", "-j",
+        action='store_true',
+        help="""Import the 'json' package, even if none of the input arguments have a .json type.""")
+    parser.add_argument(
+        "--yaml", "-y",
+        action='store_true',
+        help="""Import the 'yaml' package, even if none of the input arguments have a .yaml type.""")
+    parser.add_argument(
+        "--output", "-o",
+        help="""The name of the file to write the resulting program to.""")
     return vars(parser.parse_args())
 
 def without_flags(arg):
@@ -84,17 +108,19 @@ def pystub(args, csv, fileinput, json, yaml, output):
             outstream.write("""    return vars(parser.parse_args())\n\n\n""")
 
         # write the stub for the central logic:
-        outstream.write("""def %s(%s):\n    return foo\n\n\n"""
+        has_config = 'config' in args and yaml
+        outstream.write("""def %s(%s%s):\n    return foo\n\n\n"""
                         % (progname,
                            ", ".join([k for k in arg_types.keys() if k != 'output']
-                                     + [arg for arg in args if arg not in arg_types and arg != 'output'])
+                                     + [arg for arg in args if arg not in arg_types and arg != 'output']),
+                           ", config_data" if has_config else ""
                            ))
 
         # write a config_handling wrapper:
-        has_config = 'config' in args and yaml
-        outstream.write("""def %s_%s(%s):\n""" % (progname,
-                                                  "on_files" if has_config else "main",
-                                                  ", ".join(args)))
+        outstream.write("""def %s_%s(%s%s):\n""" % (progname,
+                                                    "on_files" if has_config else "main",
+                                                    ", ".join(args),
+                                                    ", config_data" if has_config else ""))
         if args:
             if fileinput:
                 outstream.write("""    with fileinput.input(files=inputspec) as instream:\n""")
@@ -102,15 +128,17 @@ def pystub(args, csv, fileinput, json, yaml, output):
                 outstream.write("""    with """
                                 + ", ".join("""open(%s) as %s_stream""" % (arg_name(arg), arg_name(arg))
                                             for arg in input_args
-                                            if arg_types.get(arg) not in ('bool', 'int', 'float'))
+                                            if arg_types.get(arg) not in ('bool', 'int', 'float') and arg != 'config')
                                 + ":\n")
             else:
                 outstream.write("""        data = instream.read()\n""")
             outstream.write("""        result = %s(\n""" % progname)
             for argname, argtype in arg_types.items():
-                if argname != "output":
+                if argname not in ('config', 'output'):
                     outstream.write("""            %s=%s,\n""" % (argname,
                                                                   TYPE_READERS.get(argtype, "%s_stream.read()") % argname))
+            if has_config:
+                outstream.write("""            config_data=config_data,\n""")
             outstream.write("""        )\n""")
             if 'output' in args:
                 outstream.write("""    with open(output, 'w') as outstream:\n""")
@@ -125,7 +153,7 @@ def pystub(args, csv, fileinput, json, yaml, output):
             outstream.write("""    with open(config) as confstream:\n""")
             outstream.write("""        config = yaml.safeload(confstream)\n""")
             outstream.write("""        config['args'].update(args)\n""")
-            outstream.write("""        %s_on_files(** | args):\n""" % progname)
+            outstream.write("""        %s_on_files(**config['args'], config_data=config):\n""" % progname)
 
         # write the executable boilerplate:
         outstream.write("""\nif __name__ == "__main__":\n""")
