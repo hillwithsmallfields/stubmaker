@@ -14,7 +14,7 @@ def get_args():
     return vars(parser.parse_args())
 
 def without_flags(arg):
-    return arg.removesuffix('+').removesuffix('*').removesuffix(':').removesuffix('%')
+    return arg.removesuffix('+').removesuffix('*').removesuffix(':').removesuffix('%') if arg else arg
 
 def arg_name(arg):
     """Return the name part of an arg."""
@@ -28,11 +28,12 @@ TYPE_READERS = {
     'csv': "[f(x) for x in csv.DictReader(%s_stream)]",
     'json': "json.load(%s_stream)",
     'yaml': "yaml.safeload(%s_stream)",
+    'bool': "%s",
     }
 
 def pystub(args, csv, fileinput, json, yaml, output):
     input_args = []
-    arg_types = {arg_name(arg): arg_type(arg) for arg in args}
+    arg_types = {without_flags(arg_name(arg)): without_flags(arg_type(arg)) for arg in args}
     csv |= 'csv' in arg_types.values()
     json |= 'json' in arg_types.values()
     yaml |= 'yaml' in arg_types.values()
@@ -50,6 +51,8 @@ def pystub(args, csv, fileinput, json, yaml, output):
             outstream.write("import json\n")
         if yaml:
             outstream.write("import yaml\n")
+
+        # Write the argparser details:
         if args:
             outstream.write("""\ndef get_args():\n    parser = argparse.ArgumentParser()\n""")
             short_args = set()
@@ -79,18 +82,20 @@ def pystub(args, csv, fileinput, json, yaml, output):
                                 ("" if iarg == len(args) - 1 else "--",
                                  arg, extra, action))
             outstream.write("""    return vars(parser.parse_args())\n\n\n""")
+
+        # write the stub for the central logic:
         outstream.write("""def %s(%s):\n    return foo\n\n\n"""
                         % (progname,
                            ", ".join([k for k in arg_types.keys() if k != 'output']
                                      + [arg for arg in args if arg not in arg_types and arg != 'output'])
                            ))
-        outstream.write("""def %s_main(%s):\n""" % (progname,
-                                            ", ".join(args)))
+
+        # write a config_handling wrapper:
+        has_config = 'config' in args and yaml
+        outstream.write("""def %s_%s(%s):\n""" % (progname,
+                                                  "on_files" if has_config else "main",
+                                                  ", ".join(args)))
         if args:
-            has_config = 'config' in args and yaml
-            if has_config:
-                outstream.write("""    with open(config) as confstream:\n""")
-                outstream.write("""        config = yaml.safeload(confstream)\n""")
             if fileinput:
                 outstream.write("""    with fileinput.input(files=inputspec) as instream:\n""")
             elif input_args:
@@ -113,6 +118,16 @@ def pystub(args, csv, fileinput, json, yaml, output):
             outstream.write("""    return result\n""")
         else:
             outstream.write("""    pass\n\n""")
+
+        # write a main function:
+        if has_config:
+            outstream.write("""\n\ndef %s_main(**args):\n""" % progname)
+            outstream.write("""    with open(config) as confstream:\n""")
+            outstream.write("""        config = yaml.safeload(confstream)\n""")
+            outstream.write("""        config['args'].update(args)\n""")
+            outstream.write("""        %s_on_files(** | args):\n""" % progname)
+
+        # write the executable boilerplate:
         outstream.write("""\nif __name__ == "__main__":\n""")
         outstream.write("""    %s_main(**get_args())\n""" % progname)
 
