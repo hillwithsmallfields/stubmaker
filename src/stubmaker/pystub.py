@@ -13,13 +13,16 @@ def get_args():
     parser.add_argument("--output", "-o")
     return vars(parser.parse_args())
 
+def without_flags(arg):
+    return arg.removesuffix('+').removesuffix('*').removesuffix(':').removesuffix('%')
+
 def arg_name(arg):
     """Return the name part of an arg."""
     return arg.split('.')[0]
 
 def arg_type(arg):
     """Return the type part of an arg."""
-    return arg.split('.')[1].removesuffix('+').removesuffix('*').removesuffix(':').removesuffix('%') if '.' in arg else None
+    return without_flags(arg.split('.')[1]) if '.' in arg else None
 
 TYPE_READERS = {
     'csv': "[f(x) for x in csv.DictReader(%s_stream)]",
@@ -48,24 +51,30 @@ def pystub(args, csv, fileinput, json, yaml, output):
         if yaml:
             outstream.write("import yaml\n")
         if args:
+            print("args originally", args)
             outstream.write("""\ndef get_args():\n    parser = argparse.ArgumentParser()\n""")
             short_args = set()
             for iarg, arg in enumerate(args):
+                print("  arg:", arg)
+                argtype = arg_type(arg)
                 arg = arg_name(arg)
+                print("  arg name:", arg)
                 short = arg[0]
                 extra = ', "-%s"' % short if short not in short_args else ""
                 short_args.add(short)
                 action = ""
-                if arg.endswith("+"):
+                if arg.endswith("+") or (argtype and argtype.endswith("+")):
                     action = ", action='append'"
                     arg = arg.removesuffix("+")
-                elif arg.endswith("*"):
+                elif arg.endswith("*") or (argtype and argtype.endswith("*")):
                     action = ", nargs='*'"
                     arg = arg.removesuffix("*")
                 elif arg.endswith(":"):
                     action = ", action='store_true'"
                     arg = arg.removesuffix(":")
-                elif arg.endswith("%"):
+                    arg_types[arg] = 'bool'
+                    input_args.append(arg)
+                elif arg.endswith("%") or (argtype and argtype.endswith("%")):
                     arg = arg.removesuffix("%")
                     input_args.append(arg)
                 args[iarg] = arg
@@ -73,9 +82,13 @@ def pystub(args, csv, fileinput, json, yaml, output):
                                 ("" if iarg == len(args) - 1 else "--",
                                  arg, extra, action))
             outstream.write("""    return vars(parser.parse_args())\n\n\n""")
+        print("args:", args)
+        print("input_args:", input_args)
         outstream.write("""def %s(%s):\n    return foo\n\n\n"""
                         % (progname,
-                           ", ".join(k for k in arg_types.keys() if k != 'output')))
+                           ", ".join([k for k in arg_types.keys() if k != 'output']
+                                     + [arg for arg in args if arg not in arg_types and arg != 'output'])
+                           ))
         outstream.write("""def %s_main(%s):\n""" % (progname,
                                             ", ".join(args)))
         if args and (csv or json or yaml or 'output' in args):
@@ -88,7 +101,8 @@ def pystub(args, csv, fileinput, json, yaml, output):
             elif input_args:
                 outstream.write("""    with """
                                 + ", ".join("""open(%s) as %s_stream""" % (arg_name(arg), arg_name(arg))
-                                            for arg in input_args)
+                                            for arg in input_args
+                                            if arg_types.get(arg) not in ('bool', 'int', 'float'))
                                 + ":\n")
             else:
                 outstream.write("""        data = instream.read()\n""")
