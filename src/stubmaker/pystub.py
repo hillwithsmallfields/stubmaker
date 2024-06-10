@@ -37,6 +37,11 @@ def get_args():
         action='store_true',
         help="""Include setup for postgres.""")
     parser.add_argument(
+       "--server", "-s",
+        action='store_true',
+        help="""Include a simple API server with JSON input and output."""
+    )
+    parser.add_argument(
         "--output", "-o",
         help="""The name of the file to write the resulting program to.""")
     return vars(parser.parse_args())
@@ -59,14 +64,16 @@ TYPE_READERS = {
     'bool': "%s",
     }
 
-def pystub(args, csv, fileinput, json, postgresql, yaml, output):
+def pystub(args, csv, fileinput, json, postgresql, yaml, server, output):
     input_args = []
     arg_types = {without_flags(arg_name(arg)): without_flags(arg_type(arg)) for arg in args}
     csv |= 'csv' in arg_types.values()
     json |= 'json' in arg_types.values()
     yaml |= 'yaml' in arg_types.values()
+    if server:
+        args.extend(['server:', 'host', 'port'])
+    progname = os.path.splitext(os.path.basename(output))[0]
     with open(output, 'w') as outstream:
-        progname = os.path.splitext(os.path.basename(output))[0]
         outstream.write("#!/usr/bin/env python3\n\n")
         if args:
             outstream.write("import argparse\n")
@@ -75,6 +82,8 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, output):
         if fileinput:
             outstream.write("import fileinput")
             args.append("inputspec+")
+        if server:
+            outstream.write("import flask\n")
         if json:
             outstream.write("import json\n")
         if postgresql:
@@ -114,6 +123,11 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, output):
                                 ("" if iarg == len(args) - 1 else "--",
                                  arg, extra, action))
             outstream.write("""    return vars(parser.parse_args())\n\n\n""")
+
+        if server:
+            outstream.write("%s_app = flask.Flask('%s')\n" % (progname, progname))
+            outstream.write("@%s_app.route('/%s/', methods=['GET', 'POST'])\n" % (progname, progname))
+            outstream.write("def respond_%s():\n    return flask.jsonify(%s(**flask.request.json()))\n\n\n" % (progname, progname))
 
         # write the stub for the central logic:
         has_config = 'config' in args and yaml
@@ -180,6 +194,10 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, output):
             outstream.write("""    with open(args['config']) as confstream:\n""")
             outstream.write("""        config = yaml.safeload(confstream)\n""")
             outstream.write("""        config['args'].update(args)\n""")
+            if server:
+                outstream.write("""        if config['args']['server']:\n""")
+                outstream.write("""            %s_app.run(host=args['host'], port=int(args['port']))\n""" % progname)
+                outstream.write("""        else:\n    """)
             outstream.write("""        %s_on_files(**config['args'], config_data=config):\n"""
                             % progname)
 
@@ -188,6 +206,12 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, output):
         outstream.write("""    try:\n""")
         outstream.write("""        %s_main(**get_args())\n        sys.exit(0)\n""" % progname)
         outstream.write("""    except Exception:\n        sys.exit(1)\n""")
+    if has_config:
+        with open(progname+"_conf.yaml", 'w') as conf_stream:
+            conf_stream.write("args:\n")
+            for arg in args:
+                if arg != 'config':
+                    conf_stream.write("    %s: default value for %s\n" % (arg, arg))
 
 if __name__ == "__main__":
     pystub(**get_args())
