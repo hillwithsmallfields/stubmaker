@@ -136,7 +136,7 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, server, output):
                ))
         if postgresql:
             outstream.write("    with conn.cursor() as cur:\n    ")
-        outstream.write("""    return foo\n\n\n""")
+        outstream.write("""    return foo # write your main logic here\n\n\n""")
 
         if server:
             outstream.write("%s_app = flask.Flask('%s')\n" % (progname, progname))
