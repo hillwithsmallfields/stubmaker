@@ -4,12 +4,18 @@ import argparse
 import os
 
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="""Python program stub generator.
+        Produces a file with a place to write your core logic, and provides a command-line caller for it.
+        Optionally also provides a web API.
+        An accompanying pytest stub is written.
+        If you indicate the program should take a config file, a stub for that is also written.
+        """)
     parser.add_argument(
         "--args", "-a",
         nargs='*',
         help="""Provide a list of command line arguments to the program.
-        If an argument has '%' at the end, it is treated as supplying an
+        If an argument has '%%' at the end, it is treated as supplying an
         input filename, and a reader is provided.
         An argument name may have '.csv', '.json', or '.yaml' at the end of it,
         in which case the appropriate way of reading the file is used.
@@ -43,6 +49,7 @@ def get_args():
     )
     parser.add_argument(
         "--output", "-o",
+        required=True,
         help="""The name of the file to write the resulting program to.""")
     return vars(parser.parse_args())
 
@@ -66,7 +73,7 @@ TYPE_READERS = {
 
 def pystub(args, csv, fileinput, json, postgresql, yaml, server, output):
     input_args = []
-    arg_types = {without_flags(arg_name(arg)): without_flags(arg_type(arg)) for arg in args}
+    arg_types = {without_flags(arg_name(arg)): without_flags(arg_type(arg)) for arg in (args or {})}
     csv |= 'csv' in arg_types.values()
     json |= 'json' in arg_types.values()
     yaml |= 'yaml' in arg_types.values()
