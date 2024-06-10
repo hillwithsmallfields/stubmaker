@@ -78,7 +78,8 @@ def pystub(args, csv, fileinput, json, yaml, output):
 
         # Write the argparser details:
         if args:
-            outstream.write("""\ndef get_args():\n    parser = argparse.ArgumentParser()\n""")
+            outstream.write(
+                """\ndef get_args():\n    parser = argparse.ArgumentParser()\n""")
             short_args = set()
             for iarg, arg in enumerate(args):
                 argtype = arg_type(arg)
@@ -109,37 +110,47 @@ def pystub(args, csv, fileinput, json, yaml, output):
 
         # write the stub for the central logic:
         has_config = 'config' in args and yaml
-        outstream.write("""def %s(%s%s):\n    return foo\n\n\n"""
-                        % (progname,
-                           ", ".join([k for k in arg_types.keys() if k != 'output']
-                                     + [arg for arg in args if arg not in arg_types and arg != 'output']),
-                           ", config_data" if has_config else ""
-                           ))
+        outstream.write(
+            '''def %s(%s%s):\n    """The core logic of the program, usable from the command line or as a python function."""\n    return foo\n\n\n'''
+            % (progname,
+               ", ".join([k for k in arg_types.keys() if k != 'output']
+                         + [arg for arg in args if arg not in arg_types and arg != 'output']),
+               ", config_data" if has_config else ""
+               ))
 
-        # write a config_handling wrapper:
-        outstream.write("""def %s_%s(%s%s):\n""" % (progname,
-                                                    "on_files" if has_config else "main",
-                                                    ", ".join(args),
-                                                    ", config_data" if has_config else ""))
+        # write a config_handling wrapper, or 'main' if there is no config:
+        outstream.write(
+            """def %s_%s(%s%s):\n"""
+            % (progname,
+               "on_files" if has_config else "main",
+               ", ".join(args),
+               ", config_data" if has_config else ""))
         if args:
             if fileinput:
-                outstream.write("""    with fileinput.input(files=inputspec) as instream:\n""")
+                outstream.write(
+                    """    with fileinput.input(files=inputspec) as instream:\n""")
             elif input_args:
-                outstream.write("""    with """
-                                + ", ".join("""open(%s) as %s_stream""" % (arg_name(arg), arg_name(arg))
-                                            for arg in input_args
-                                            if arg_types.get(arg) not in ('bool', 'int', 'float') and arg != 'config')
-                                + ":\n")
+                outstream.write(
+                    """    with """
+                    + ", ".join("""open(%s) as %s_stream""" % (arg_name(arg), arg_name(arg))
+                                for arg in input_args
+                                if arg_types.get(arg) not in ('bool', 'int', 'float') and arg != 'config')
+                    + ":\n")
             else:
                 outstream.write("""        data = instream.read()\n""")
             outstream.write("""        result = %s(\n""" % progname)
             for argname, argtype in arg_types.items():
                 if argname not in ('config', 'output'):
-                    outstream.write("""            %s=%s,\n""" % (argname,
-                                                                  TYPE_READERS.get(argtype, "%s_stream.read()") % argname))
+                    outstream.write(
+                        """            %s=%s,\n"""
+                        % (argname,
+                           TYPE_READERS.get(argtype, "%s_stream.read()") % argname))
             if has_config:
                 outstream.write("""            config_data=config_data,\n""")
             outstream.write("""        )\n""")
+
+            # write the output after closing the inputs, in case we're
+            # writing back to one of the same files:
             if 'output' in args:
                 outstream.write("""    with open(output, 'w') as outstream:\n""")
                 outstream.write("""        result.save(outstream)\n""")
@@ -147,13 +158,16 @@ def pystub(args, csv, fileinput, json, yaml, output):
         else:
             outstream.write("""    pass\n\n""")
 
-        # write a main function:
+        # if we're using a config-handling wrapper, write a main
+        # function to call it; otherwise we will have written 'main'
+        # above:
         if has_config:
             outstream.write("""\n\ndef %s_main(**args):\n""" % progname)
-            outstream.write("""    with open(config) as confstream:\n""")
+            outstream.write("""    with open(args['config']) as confstream:\n""")
             outstream.write("""        config = yaml.safeload(confstream)\n""")
             outstream.write("""        config['args'].update(args)\n""")
-            outstream.write("""        %s_on_files(**config['args'], config_data=config):\n""" % progname)
+            outstream.write("""        %s_on_files(**config['args'], config_data=config):\n"""
+                            % progname)
 
         # write the executable boilerplate:
         outstream.write("""\nif __name__ == "__main__":\n""")
