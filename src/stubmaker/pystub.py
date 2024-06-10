@@ -33,6 +33,10 @@ def get_args():
         action='store_true',
         help="""Import the 'yaml' package, even if none of the input arguments have a .yaml type.""")
     parser.add_argument(
+        "--postgresql", "--pg", "-p",
+        action='store_true',
+        help="""Include setup for postgres.""")
+    parser.add_argument(
         "--output", "-o",
         help="""The name of the file to write the resulting program to.""")
     return vars(parser.parse_args())
@@ -55,7 +59,7 @@ TYPE_READERS = {
     'bool': "%s",
     }
 
-def pystub(args, csv, fileinput, json, yaml, output):
+def pystub(args, csv, fileinput, json, postgresql, yaml, output):
     input_args = []
     arg_types = {without_flags(arg_name(arg)): without_flags(arg_type(arg)) for arg in args}
     csv |= 'csv' in arg_types.values()
@@ -73,6 +77,8 @@ def pystub(args, csv, fileinput, json, yaml, output):
             args.append("inputspec+")
         if json:
             outstream.write("import json\n")
+        if postgresql:
+            outstream.write("import psycopg\n")
         if yaml:
             outstream.write("import yaml\n")
 
@@ -111,12 +117,16 @@ def pystub(args, csv, fileinput, json, yaml, output):
         # write the stub for the central logic:
         has_config = 'config' in args and yaml
         outstream.write(
-            '''def %s(%s%s):\n    """The core logic of the program, usable from the command line or as a python function."""\n    return foo\n\n\n'''
+            '''def %s(%s%s%s):\n    """The core logic of the program, usable from the command line or as a python function."""\n'''
             % (progname,
                ", ".join([k for k in arg_types.keys() if k != 'output']
                          + [arg for arg in args if arg not in arg_types and arg != 'output']),
-               ", config_data" if has_config else ""
+               ", config_data" if has_config else "",
+               ", conn" if postgresql else ""
                ))
+        if postgresql:
+            outstream.write("    with conn.cursor() as cur:\n    ")
+        outstream.write("""    return foo\n\n\n""")
 
         # write a config_handling wrapper, or 'main' if there is no config:
         outstream.write(
@@ -135,6 +145,7 @@ def pystub(args, csv, fileinput, json, yaml, output):
                     + ", ".join("""open(%s) as %s_stream""" % (arg_name(arg), arg_name(arg))
                                 for arg in input_args
                                 if arg_types.get(arg) not in ('bool', 'int', 'float') and arg != 'config')
+                    + (', psycopg.connect("dbname=%s user=%s" % (config["database"], config["datauser"])) as conn' if postgresql else "")
                     + ":\n")
             else:
                 outstream.write("""        data = instream.read()\n""")
@@ -145,6 +156,8 @@ def pystub(args, csv, fileinput, json, yaml, output):
                         """            %s=%s,\n"""
                         % (argname,
                            TYPE_READERS.get(argtype, "%s_stream.read()") % argname))
+            if postgresql:
+                outstream.write("""            conn,\n""")
             if has_config:
                 outstream.write("""            config_data=config_data,\n""")
             outstream.write("""        )\n""")
