@@ -124,11 +124,6 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, server, output):
                                  arg, extra, action))
             outstream.write("""    return vars(parser.parse_args())\n\n\n""")
 
-        if server:
-            outstream.write("%s_app = flask.Flask('%s')\n" % (progname, progname))
-            outstream.write("@%s_app.route('/%s/', methods=['GET', 'POST'])\n" % (progname, progname))
-            outstream.write("def respond_%s():\n    return flask.jsonify(%s(**flask.request.json()))\n\n\n" % (progname, progname))
-
         # write the stub for the central logic:
         has_config = 'config' in args and yaml
         outstream.write(
@@ -142,6 +137,11 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, server, output):
         if postgresql:
             outstream.write("    with conn.cursor() as cur:\n    ")
         outstream.write("""    return foo\n\n\n""")
+
+        if server:
+            outstream.write("%s_app = flask.Flask('%s')\n" % (progname, progname))
+            outstream.write("@%s_app.route('/%s/', methods=['GET', 'POST'])\n" % (progname, progname))
+            outstream.write("def respond_%s():\n    return flask.jsonify(%s(**flask.request.json()))\n\n\n" % (progname, progname))
 
         # write a config_handling wrapper, or 'main' if there is no config:
         outstream.write(
