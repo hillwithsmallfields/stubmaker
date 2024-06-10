@@ -79,6 +79,7 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, output):
             outstream.write("import json\n")
         if postgresql:
             outstream.write("import psycopg\n")
+        outstream.write("import sys\n")
         if yaml:
             outstream.write("import yaml\n")
 
@@ -184,7 +185,9 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, output):
 
         # write the executable boilerplate:
         outstream.write("""\nif __name__ == "__main__":\n""")
-        outstream.write("""    %s_main(**get_args())\n""" % progname)
+        outstream.write("""    try:\n""")
+        outstream.write("""        %s_main(**get_args())\n        sys.exit(0)\n""" % progname)
+        outstream.write("""    except Exception:\n        sys.exit(1)\n""")
 
 if __name__ == "__main__":
     pystub(**get_args())
