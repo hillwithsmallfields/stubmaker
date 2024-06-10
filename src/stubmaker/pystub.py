@@ -108,7 +108,11 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, server, output):
                 argtype = arg_type(arg)
                 arg = arg_name(arg)
                 short = arg[0]
-                extra = ', "-%s"' % short if short not in short_args else ""
+                extra = ', "-%s"' % (short
+                                     if short not in short_args
+                                     else (short.upper()
+                                           if short.upper() not in short_args
+                                           else ""))
                 short_args.add(short)
                 action = ""
                 if arg.endswith("+") or (argtype and argtype.endswith("+")):
