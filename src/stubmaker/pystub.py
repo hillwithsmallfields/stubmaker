@@ -206,6 +206,12 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, server, output):
         outstream.write("""    try:\n""")
         outstream.write("""        %s_main(**get_args())\n        sys.exit(0)\n""" % progname)
         outstream.write("""    except Exception:\n        sys.exit(1)\n""")
+    with open("test_%s.py" % progname, 'w') as test_stream:
+        test_stream.write("import %s\n\n" % progname)
+        test_stream.write("def test_%s():\n    assert %s(\n" % (progname, progname))
+        for arg in args:
+            test_stream.write("        %s=None,\n" % arg)
+        test_stream.write("    ) == 'expected_result'\n")
     if has_config:
         with open(progname+"_conf.yaml", 'w') as conf_stream:
             conf_stream.write("args:\n")
