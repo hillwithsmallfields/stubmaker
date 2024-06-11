@@ -92,7 +92,9 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
     yaml |= 'yaml' in arg_types.values()
     if server:
         args.extend(['server:', 'host', 'port'])
-    progname = os.path.splitext(os.path.basename(output))[0]
+    prog_name = os.path.splitext(os.path.basename(output))[0]
+    prog_dir = os.path.dirname(output)
+    os.makedirs(prog_dir, exist_ok=True)
 
     with open(output, 'w') as outstream:
         outstream.write("#!/usr/bin/env python3\n\n")
@@ -158,7 +160,7 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
         has_config = 'config' in args and yaml
         outstream.write(
             '''def %s(%s%s%s):\n    """The core logic of the program, usable from the command line or as a python function."""\n'''
-            % (progname,
+            % (prog_name,
                ", ".join([k for k in arg_types.keys() if k not in ['config', 'output']]
                          + [arg for arg in args if arg not in arg_types and arg != 'output']),
                ", config_data" if has_config else "",
@@ -169,14 +171,14 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
         outstream.write("""    return foo # TODO: write your main logic here\n\n\n""")
 
         if server:
-            outstream.write("%s_app = flask.Flask('%s')\n" % (progname, progname))
-            outstream.write("@%s_app.route('/%s/', methods=['GET', 'POST'])\n" % (progname, progname))
-            outstream.write("def respond_%s():\n    return flask.jsonify(%s(**flask.request.json()))\n\n\n" % (progname, progname))
+            outstream.write("%s_app = flask.Flask('%s')\n" % (prog_name, prog_name))
+            outstream.write("@%s_app.route('/%s/', methods=['GET', 'POST'])\n" % (prog_name, prog_name))
+            outstream.write("def respond_%s():\n    return flask.jsonify(%s(**flask.request.json()))\n\n\n" % (prog_name, prog_name))
 
         # write a config_handling wrapper, or 'main' if there is no config:
         outstream.write(
             """def %s_%s(%s%s):\n"""
-            % (progname,
+            % (prog_name,
                "on_files" if has_config else "main",
                ", ".join(args),
                ", config_data" if has_config else ""))
@@ -195,7 +197,7 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
                     + ":\n")
             else:
                 outstream.write("""        data = instream.read()\n""")
-            outstream.write("""        result = %s(\n""" % progname)
+            outstream.write("""        result = %s(\n""" % prog_name)
             for argname, argtype in arg_types.items():
                 if argname not in ('config', 'output'):
                     outstream.write(
@@ -221,32 +223,34 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
         # function to call it; otherwise we will have written 'main'
         # above:
         if has_config:
-            outstream.write("""\n\ndef %s_main(**args):\n""" % progname)
+            outstream.write("""\n\ndef %s_main(**args):\n""" % prog_name)
             outstream.write("""    with open(args['config']) as confstream:\n""")
             outstream.write("""        config = yaml.safeload(confstream)\n""")
             outstream.write("""        config['args'].update({v: os.environ[v.upper()] for v in config['args'].keys() if v.upper() in os.environ}).update(args)\n""")
             if server:
                 outstream.write("""        if config['args']['server']:\n""")
-                outstream.write("""            %s_app.run(host=args['host'], port=int(args['port']))\n""" % progname)
+                outstream.write("""            %s_app.run(host=args['host'], port=int(args['port']))\n""" % prog_name)
                 outstream.write("""        else:\n    """)
             outstream.write("""        %s_on_files(**config['args'], config_data=config):\n"""
-                            % progname)
+                            % prog_name)
 
         # write the executable boilerplate:
         outstream.write("""\nif __name__ == "__main__":\n""")
         outstream.write("""    try:\n""")
-        outstream.write("""        %s_main(**get_args())\n        sys.exit(0)\n""" % progname)
+        outstream.write("""        %s_main(**get_args())\n        sys.exit(0)\n""" % prog_name)
         outstream.write("""    except Exception:\n        sys.exit(1)\n""")
 
-    with open("test_%s.py" % progname, 'w') as test_stream:
-        test_stream.write("import %s\n\n" % progname)
-        test_stream.write("def test_%s():\n    assert %s(\n" % (progname, progname))
+    test_dir = os.path.join(prog_dir, "test")
+    os.makedirs(test_dir, exist_ok=True)
+    with open(os.path.join(test_dir, "test_%s.py" % prog_name), 'w') as test_stream:
+        test_stream.write("import %s\n\n" % prog_name)
+        test_stream.write("def test_%s():\n    assert %s(\n" % (prog_name, prog_name))
         for arg in args:
             test_stream.write("        %s=None,\n" % arg)
         test_stream.write("    ) == 'expected_result'\n")
 
     if has_config:
-        with open(progname+"_conf.yaml", 'w') as conf_stream:
+        with open(os.path.join(prog_dir, prog_name+"_conf.yaml"), 'w') as conf_stream:
             conf_stream.write("args:\n")
             for arg in args:
                 if arg != 'config':
