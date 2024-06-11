@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import stat
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -94,7 +95,8 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
         args.extend(['server:', 'host', 'port'])
     prog_name = os.path.splitext(os.path.basename(output))[0]
     prog_dir = os.path.dirname(output)
-    os.makedirs(prog_dir, exist_ok=True)
+    if prog_dir:
+        os.makedirs(prog_dir, exist_ok=True)
 
     with open(output, 'w') as outstream:
         outstream.write("#!/usr/bin/env python3\n\n")
@@ -239,6 +241,8 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
         outstream.write("""    try:\n""")
         outstream.write("""        %s_main(**get_args())\n        sys.exit(0)\n""" % prog_name)
         outstream.write("""    except Exception:\n        sys.exit(1)\n""")
+
+    os.chmod(output, stat.S_IRWXU | stat.S_IRWXG | stat.S_IROTH | stat.S_IXOTH)
 
     test_dir = os.path.join(prog_dir, "test")
     os.makedirs(test_dir, exist_ok=True)
