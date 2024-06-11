@@ -159,7 +159,7 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
         outstream.write(
             '''def %s(%s%s%s):\n    """The core logic of the program, usable from the command line or as a python function."""\n'''
             % (progname,
-               ", ".join([k for k in arg_types.keys() if k != 'output']
+               ", ".join([k for k in arg_types.keys() if k not in ['config', 'output']]
                          + [arg for arg in args if arg not in arg_types and arg != 'output']),
                ", config_data" if has_config else "",
                ", conn" if postgresql else ""
@@ -224,7 +224,7 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
             outstream.write("""\n\ndef %s_main(**args):\n""" % progname)
             outstream.write("""    with open(args['config']) as confstream:\n""")
             outstream.write("""        config = yaml.safeload(confstream)\n""")
-            outstream.write("""        config['args'].update(args)\n""")
+            outstream.write("""        config['args'].update({v: os.environ[v.upper()] for v in config['args'].keys() if v.upper() in os.environ}).update(args)\n""")
             if server:
                 outstream.write("""        if config['args']['server']:\n""")
                 outstream.write("""            %s_app.run(host=args['host'], port=int(args['port']))\n""" % progname)
