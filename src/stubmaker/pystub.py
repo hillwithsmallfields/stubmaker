@@ -233,7 +233,7 @@ def pystub(args, csv, fileinput, json, postgresql, yaml, logging, server, output
                 outstream.write("""        if config['args']['server']:\n""")
                 outstream.write("""            %s_app.run(host=args['host'], port=int(args['port']))\n""" % prog_name)
                 outstream.write("""        else:\n    """)
-            outstream.write("""        %s_on_files(**config['args'], config_data=config):\n"""
+            outstream.write("""        %s_on_files(**config['args'], config_data=config)\n"""
                             % prog_name)
 
         # write the executable boilerplate:
